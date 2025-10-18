@@ -47,8 +47,6 @@ def ingest_urls():
     
 
 if __name__ == '__main__':
-    print("oi")
-
     ingested_pdfs = ingest_pdfs()
     ingested_urls = ingest_urls()
 
