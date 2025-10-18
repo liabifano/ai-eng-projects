@@ -1,25 +1,11 @@
-# Import standard libraries for file handling and text processing
 import os, pathlib, textwrap, glob
-
-# Load documents from various sources (URLs, text files, PDFs)
+import getpass
 from langchain_community.document_loaders import UnstructuredURLLoader, TextLoader, PyPDFLoader
-
-# Split long texts into smaller, manageable chunks for embedding
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-# Vector store to store and retrieve embeddings efficiently using FAISS
 from langchain.vectorstores import FAISS
-
-# Generate text embeddings using OpenAI or Hugging Face models
 from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings, SentenceTransformerEmbeddings
-
-# Use local LLMs (e.g., via Ollama) for response generation
 from langchain.llms import Ollama
-
-# Build a retrieval chain that combines a retriever, a prompt, and an LLM
 from langchain.chains import ConversationalRetrievalChain
-
-# Create prompts for the RAG system
 from langchain.prompts import PromptTemplate
 
 print("✅ Libraries imported! You're good to go!")
@@ -44,7 +30,7 @@ def ingest_urls():
     # --- WooCommerce – REST API reference ---
     # "https://woocommerce.github.io/woocommerce-rest-api-docs/v3.html",
     ]
-    return UnstructuredURLLoader(urls=URLS).load()
+    return [[d] for d in UnstructuredURLLoader(urls=URLS).load()]
     
 
 if __name__ == '__main__':
@@ -53,10 +39,27 @@ if __name__ == '__main__':
     ingested_pdfs = ingest_pdfs()
     ingested_urls = ingest_urls()
 
-    docs = ingested_pdfs + ingested_urls
+    docs = ingested_pdfs + ingested_urls # List[List[Document]]
 
-    chunked_docs = [RecursiveCharacterTextSplitter(doc) for doc in docs]
+    splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=30)
+    
+    chunked_docs = [splitter.split_documents(doc) for doc in docs]
+    all_docs = sum(chunked_docs, [])
 
-    print(len(chunked_docs[0]))
+    embedder = SentenceTransformerEmbeddings(model_name="thenlper/gte-small")
+
+    db = FAISS.from_documents(all_docs, embedding=embedder)
+
+    llm = Ollama(model="gemma3:1b")
+    #response = llm.invoke("Explain what CrossFit is in one sentence.")
+    #response = llm.invoke("How can AI be used for porn?")
+    #print(response)
+
+    #query = "How can AI be used for porn?"
+    #results = db.similarity_search(query, k=4)    
+    #embedding_vector = embedder.embed_query(chunked_docs)
+    import pdb; pdb.set_trace()
+    
+    #print(len(embedding_vector))
 
 
