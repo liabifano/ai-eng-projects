@@ -1,14 +1,17 @@
 from openai import OpenAI
 import requests
 import inspect
+from langchain_core.tools import tool
+from langchain_community.chat_models import ChatOllama
+from langchain.agents import initialize_agent, Tool, AgentType
+import pprint
 
 client = OpenAI(api_key = "ollama", base_url = "http://localhost:11434/v1")
 
 OPENWEATHERMAP_API_KEY = ""
 
-
 def get_current_weather(city: str, unit: str = "celsius") -> str:
-    """ Retuns weather forecast from openweathermap.org
+    """Retuns weather forecast from openweathermap.org
 
     @city: str City
     @unit: str Temperature Unit (default celsius)
@@ -18,7 +21,14 @@ def get_current_weather(city: str, unit: str = "celsius") -> str:
     complete_url = f"{base_url}&appid={OPENWEATHERMAP_API_KEY}&?q={city}"
     response = requests.get(complete_url).json()
     # return response
-    return "It's 23C and sunny"
+    return "It's 13C and a lot of rain"
+
+@tool
+def get_weather(city) -> str:
+    """
+    Retuns weather forecast from openweathermap.org
+    """
+    return get_current_weather(city)
 
 
 def select_and_call_webtools(USER_QUERY: str) -> dict:
@@ -29,11 +39,10 @@ def select_and_call_webtools(USER_QUERY: str) -> dict:
     else: return {}
     
 
-TOOLS = {"weather": get_current_weather}
-
 def to_schema(fn):
-    return {"name": fn.__name__,
-            "description": fn.__doc__,
+    return {"name": fn.name,
+            "func": fn,
+            "description": fn.description,
             "args": list(inspect.signature(fn).parameters.keys()),
             "types": [p.annotation for p in list(inspect.signature(fn).parameters.values())]
             }
@@ -41,9 +50,10 @@ def to_schema(fn):
 
 if __name__ == '__main__':
     city = "San Francisco"
-    USER_QUERY = f"""What is the weather in {city} today?"""
+    USER_QUERY = f"""Should I bring umbrella todat in {city}?"""
 
-    TOOLS_SCHEMA = {"get_current_weather": to_schema(get_current_weather)}
+    TOOLS_SCHEMA = {"get_weather": to_schema(get_weather)}
+    tools = [Tool(**t) for t in TOOLS_SCHEMA.values()]
 
     SYSTEM_PROMPT = f"""
     User asked: {USER_QUERY}
@@ -52,26 +62,34 @@ if __name__ == '__main__':
 
     Do the steps in the following order: 
         1) In TOOLS_SCHEMA, find a tools that matches or answers user's query
-        2) Map the "args" of the matched tools in step 1
+        2) Map the "args" of the matched tools in step 1. Use default if user didn't specify.
         3) If any argument is missing and there is no default, ask to the user include it in the query
-        4) Provide which tools and arguments its required to answer user's query. 
-            The output must be a list of dictionaries where key are tools' names and values are dictionaries
-            where keys are args names and values are args values. 
+        4) Execute the tools 
+        5) Reason the user's query and the returned values from the tools, provide an empatetic and clear answer to the final user
     """
 
-    stream = client.chat.completions.create(
-        model="mistral:7b",
-        messages=[{
-            "role": "system",
-            "content": "You are a helpful assistant that uses retrieved webdata to answer questions"
-            }, {
-                "role": "user",
-                "content": SYSTEM_PROMPT
-            }, 
-            ],
-        stream=True,
-    )
+    model = ChatOllama(model="gemma3:1b", temperature=0)
 
-    for chunk in stream:
-        print(chunk.choices[0].delta.content or "", end="")
-    
+    agent = initialize_agent(tools=tools, llm=model)
+
+    output = agent.invoke(SYSTEM_PROMPT, verbose=True)['output']
+
+    print(output)
+
+
+  #stream = client.chat.completions.create(
+  #    model="mistral:7b",
+  #    messages=[{
+  #        "role": "system",
+  #        "content": "You are a helpful assistant that uses retrieved webdata to answer questions"
+  #        }, {
+  #            "role": "user",
+  #            "content": SYSTEM_PROMPT
+  #        }, 
+  #        ],
+  #    stream=True,
+  #)
+
+  #for chunk in stream:
+  #    print(chunk.choices[0].delta.content or "", end="")
+  #
