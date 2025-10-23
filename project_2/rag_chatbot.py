@@ -60,6 +60,7 @@ if __name__ == '__main__':
     embedder = SentenceTransformerEmbeddings(model_name="thenlper/gte-small")
 
     faiss_index = FAISS.from_documents(all_docs, embedding=embedder)
+    faiss_index.save_local("faiss_index")
     retriever = faiss_index.as_retriever(search_kwargs={"k": 4})
 
     llm = Ollama(model="gemma3:1b", temperature=0.1)
